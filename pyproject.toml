@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "history-question-builder"
+version = "0.1.0"
+description = "Crawl historical events and generate reviewable historical prediction questions."
+requires-python = ">=3.12"
+dependencies = [
+    "requests",
+    "beautifulsoup4",
+    "lxml",
+    "python-dateutil",
+    "pydantic",
+    "python-dotenv",
+    "tenacity",
+    "tqdm",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+crawl-events = "history_question_builder.event_crawler.cli:main"
+ask-questions = "history_question_builder.question_asker.pipeline:main"

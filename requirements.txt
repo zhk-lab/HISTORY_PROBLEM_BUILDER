@@ -1,0 +1,8 @@
+requests
+beautifulsoup4
+lxml
+python-dateutil
+pydantic
+python-dotenv
+tenacity
+tqdm
