@@ -12,17 +12,17 @@ from ..event_crawler.utils import clip_text
 
 
 CANDIDATE_FIELDNAMES = [
+    "question",
+    "options",
+    "prediction_date",
+    "ground_truth",
+    "resolution_detail",
     "question_id",
     "event_id",
     "domain",
     "event_name",
     "event_summary",
     "source_urls",
-    "question",
-    "options",
-    "prediction_date",
-    "ground_truth",
-    "resolution_detail",
     "risk_flags",
     "review_status",
     "review_notes",
@@ -223,4 +223,3 @@ def normalize_question_domain(value: str, *, fallback: str = "") -> str:
     if fallback_cleaned == "conflict" or cleaned in {"election", "government"}:
         return "politics"
     return "politics"
-

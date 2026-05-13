@@ -27,7 +27,11 @@ from history_question_builder.question_asker.models import (
     QuestionCandidate,
     RejectedQuestionEvent,
 )
-from history_question_builder.question_asker.pipeline import load_events_jsonl
+from history_question_builder.question_asker.pipeline import (
+    _event_dedupe_key,
+    _question_dedupe_key,
+    load_events_jsonl,
+)
 from history_question_builder.question_asker.screening import screen_event
 from history_question_builder.question_asker.storage import (
     write_question_candidates_csv,
@@ -39,6 +43,25 @@ from history_question_builder.question_asker.validation import validate_question
 
 class QuestionPipelineTests(unittest.TestCase):
     def test_candidate_and_rejected_field_shapes(self) -> None:
+        self.assertEqual(
+            CANDIDATE_FIELDNAMES,
+            [
+                "question",
+                "options",
+                "prediction_date",
+                "ground_truth",
+                "resolution_detail",
+                "question_id",
+                "event_id",
+                "domain",
+                "event_name",
+                "event_summary",
+                "source_urls",
+                "risk_flags",
+                "review_status",
+                "review_notes",
+            ],
+        )
         event = _event(
             source="ifes_electionguide",
             domain="politics",
@@ -145,23 +168,44 @@ class QuestionPipelineTests(unittest.TestCase):
         self.assertNotRegex(SYSTEM_PROMPT, r"[\u3400-\u9fff]")
         self.assertNotRegex(prompt_text, r"[\u3400-\u9fff]")
         self.assertIn("All output field values must be written in English", SYSTEM_PROMPT)
+        self.assertIn("Internal workflow", SYSTEM_PROMPT)
+        self.assertIn("Step 1: Forecast setup check", SYSTEM_PROMPT)
+        self.assertIn("Step 2: Prediction date selection", SYSTEM_PROMPT)
+        self.assertIn("official scheduled data releases", SYSTEM_PROMPT)
+        self.assertIn("Step 3: Event decomposition", SYSTEM_PROMPT)
+        self.assertIn("Step 4: Choose exactly one prediction dimension", SYSTEM_PROMPT)
+        self.assertIn("Step 5: Select the best question family", SYSTEM_PROMPT)
+        self.assertIn("Step 6: Build answer options", SYSTEM_PROMPT)
+        self.assertIn("Step 7: Resolve ground_truth", SYSTEM_PROMPT)
+        self.assertIn("Step 8: Final quality gate", SYSTEM_PROMPT)
         self.assertIn("N-choice", SYSTEM_PROMPT)
         self.assertIn("Every question must be a multiple-choice question", SYSTEM_PROMPT)
-        self.assertIn("Yes/No is a valid two-option multiple-choice question", SYSTEM_PROMPT)
+        self.assertIn("Use Yes/No only as a fallback", SYSTEM_PROMPT)
+        self.assertIn("Prefer 3 to 5 answer options", SYSTEM_PROMPT)
         self.assertIn("options must use labels exactly like", SYSTEM_PROMPT)
         self.assertIn("ground_truth must be only the correct option label", SYSTEM_PROMPT)
         self.assertIn("Time + Subject + Action + Outcome", SYSTEM_PROMPT)
-        self.assertIn("time: when something will happen", SYSTEM_PROMPT)
+        self.assertIn("time: when a known process", SYSTEM_PROMPT)
         self.assertIn("subject: who or which entity", SYSTEM_PROMPT)
-        self.assertIn("outcome: what status, amount, direction", SYSTEM_PROMPT)
-        self.assertIn("direction: increase, decrease, or unchanged", SYSTEM_PROMPT)
+        self.assertIn("outcome/status: which formal state", SYSTEM_PROMPT)
+        self.assertIn("Direction-choice", SYSTEM_PROMPT)
         self.assertIn("threshold_deadline", SYSTEM_PROMPT)
         self.assertIn("range_bucket", SYSTEM_PROMPT)
         self.assertIn("magnitude_margin", SYSTEM_PROMPT)
         self.assertIn('start with "As of YYYY-MM-DD,"', SYSTEM_PROMPT)
-        self.assertIn("Do not ask \"What was the outcome", SYSTEM_PROMPT)
+        self.assertIn('It does not ask "What was the outcome', SYSTEM_PROMPT)
+        self.assertIn("raw rewrite of the event title or summary", SYSTEM_PROMPT)
+        self.assertIn("Negative answers require evidence", SYSTEM_PROMPT)
+        self.assertIn("Yes/No permission test", SYSTEM_PROMPT)
+        self.assertIn("Bad immediate-news rewrite", SYSTEM_PROMPT)
+        self.assertIn("Correct action: reject", SYSTEM_PROMPT)
         self.assertIn("Bad: What was the outcome", SYSTEM_PROMPT)
         self.assertIn("Good question: As of 2026-04-30", SYSTEM_PROMPT)
+        self.assertIn("Bad measured-period date", SYSTEM_PROMPT)
+        self.assertIn("Bad ambiguous negotiation question", SYSTEM_PROMPT)
+        self.assertIn("Apply the internal workflow", prompt_text)
+        self.assertIn("non-binary 3-option to 5-option framing", prompt_text)
+        self.assertIn("real forecast setup", prompt_text)
         self.assertIn("options array contains A./B. labeled choices", prompt_text)
 
     def test_chat_completions_agent_can_be_built_from_generic_env(self) -> None:
@@ -250,6 +294,66 @@ class QuestionPipelineTests(unittest.TestCase):
 
         self.assertIn("non_english_output", flags)
 
+    def test_validation_flags_low_information_event_rewrite(self) -> None:
+        event = _event(
+            source="wikipedia_current_events",
+            domain="politics",
+            title="Russia-European Union relations",
+            summary=(
+                "The European Parliament adopts a resolution supporting the "
+                "establishment of a special tribunal to prosecute Russian "
+                "leaders for crimes related to the war in Ukraine."
+            ),
+        )
+        weak_candidate = QuestionCandidate(
+            question_id="test",
+            event_id=event.event_id,
+            domain="politics",
+            event_name="Russia-European Union relations",
+            question=(
+                "As of 2026-04-30, will the European Parliament adopt a "
+                "resolution supporting a special tribunal for Russian leaders "
+                "related to the Ukraine war?"
+            ),
+            options=["A. Yes", "B. No"],
+            prediction_date="2026-04-30",
+            ground_truth="A",
+            resolution_detail="The European Parliament adopted the resolution.",
+            event_summary="test event summary",
+            source_urls="https://example.com/result",
+        )
+        threshold_candidate = QuestionCandidate(
+            question_id="test2",
+            event_id="threshold-event",
+            domain="politics",
+            event_name="2026 Antiguan general election",
+            question=(
+                "As of 2026-04-30, will Gaston Browne's ABLP win more than "
+                "10 of the 17 seats in the 2026 Antiguan general election?"
+            ),
+            options=["A. Yes", "B. No"],
+            prediction_date="2026-04-30",
+            ground_truth="A",
+            resolution_detail="ABLP won 15 of 17 seats.",
+            event_summary="test event summary",
+            source_urls="https://example.com/result",
+        )
+        threshold_event = _event(
+            source="wikipedia_current_events",
+            domain="politics",
+            title="2026 Antiguan general election",
+            summary=(
+                "Official results indicated that the ABLP led by Gaston "
+                "Browne won 15 of 17 seats."
+            ),
+        )
+
+        weak_flags = validate_question(event, weak_candidate)
+        threshold_flags = validate_question(threshold_event, threshold_candidate)
+
+        self.assertIn("low_information_event_rewrite", weak_flags)
+        self.assertNotIn("low_information_event_rewrite", threshold_flags)
+
     def test_validation_flags_mechanical_structure_errors(self) -> None:
         event = _event(
             source="fomc_calendar",
@@ -328,6 +432,32 @@ class QuestionPipelineTests(unittest.TestCase):
             _cleanup_test_files(path)
         self.assertEqual(len(loaded), 1)
         self.assertEqual(loaded[0].event_id, event.event_id)
+
+    def test_dedupe_keys_ignore_event_title_and_question_punctuation(self) -> None:
+        first = _event(
+            source="wikipedia_current_events",
+            domain="public_risk",
+            title="Dubai International Airport",
+            summary=(
+                "Dubai International Airport reports a 66% drop in passenger "
+                "traffic in March 2026."
+            ),
+        )
+        duplicate = _event(
+            source="wikipedia_current_events",
+            domain="public_risk",
+            title="Economic impact of the 2026 Iran war",
+            summary=(
+                "Dubai International Airport reports a 66% drop in passenger "
+                "traffic in March 2026."
+            ),
+        )
+
+        self.assertEqual(_event_dedupe_key(first), _event_dedupe_key(duplicate))
+        self.assertEqual(
+            _question_dedupe_key("As of 2026-02-28, what range?"),
+            _question_dedupe_key("as of 2026 02 28 what range"),
+        )
 
 
 def _event(

@@ -19,6 +19,7 @@ from .models import ALLOWED_QUESTION_DOMAINS, QuestionCandidate
 MIN_QUESTION_CHARS = 20
 MAX_QUESTION_CHARS = 280
 MAX_RESOLUTION_DETAIL_CHARS = 1200
+MIN_REWRITE_TOKEN_OVERLAP = 0.55
 
 DATE_OR_TIME_PATTERNS = [
     r"\b20\d{2}[-/]\d{1,2}[-/]\d{1,2}\b",
@@ -64,6 +65,50 @@ BANNED_BROAD_QUESTION_PATTERNS = [
 CJK_PATTERN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 OPTION_LABEL_PATTERN = re.compile(r"^[A-F]\. .+")
 GROUND_TRUTH_LABEL_PATTERN = re.compile(r"^[A-F]$")
+MEANINGFUL_TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
+YES_NO_OPTION_SETS = {("yes", "no"), ("no", "yes")}
+REWRITE_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "by",
+    "did",
+    "do",
+    "does",
+    "for",
+    "from",
+    "have",
+    "in",
+    "into",
+    "is",
+    "it",
+    "its",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "their",
+    "to",
+    "was",
+    "were",
+    "what",
+    "which",
+    "will",
+    "with",
+}
+THRESHOLD_OR_DEADLINE_PATTERNS = [
+    r"\b(?:more|less|fewer|greater|higher|lower)\s+than\b",
+    r"\b(?:at\s+least|at\s+most|no\s+more\s+than|no\s+less\s+than)\b",
+    r"\b(?:over|under|above|below)\s+\d",
+    r"\bbetween\s+\d",
+    r"\bby\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2},?\s+20\d{2}\b",
+    r"\bby\s+20\d{2}[-/]\d{1,2}[-/]\d{1,2}\b",
+]
 
 
 def validate_question(event: CandidateEvent, candidate: QuestionCandidate) -> list[str]:
@@ -94,6 +139,9 @@ def validate_question(event: CandidateEvent, candidate: QuestionCandidate) -> li
 
     if _has_broad_question_pattern(question_lower):
         flags.append("unclear_resolution_criteria")
+
+    if _looks_like_low_information_event_rewrite(event, question, options):
+        flags.append("low_information_event_rewrite")
 
     if not options or len(options) < 2:
         flags.append("missing_choice_options")
@@ -153,6 +201,67 @@ def _has_broad_question_pattern(question_lower: str) -> bool:
         re.search(pattern, question_lower, flags=re.IGNORECASE)
         for pattern in BANNED_BROAD_QUESTION_PATTERNS
     )
+
+
+def _looks_like_low_information_event_rewrite(
+    event: CandidateEvent, question: str, options: list[str]
+) -> bool:
+    if not _is_yes_no_options(options):
+        return False
+    if "will" not in question.lower():
+        return False
+    if _has_threshold_or_deadline_boundary(question):
+        return False
+
+    event_tokens = _meaningful_tokens(f"{event.title} {event.summary}")
+    question_tokens = _meaningful_tokens(question)
+    if not event_tokens or not question_tokens:
+        return False
+
+    overlap = len(question_tokens & event_tokens) / len(question_tokens)
+    return overlap >= MIN_REWRITE_TOKEN_OVERLAP
+
+
+def _is_yes_no_options(options: list[str]) -> bool:
+    stripped = tuple(_strip_option_label(option).lower() for option in options)
+    return stripped in YES_NO_OPTION_SETS
+
+
+def _strip_option_label(option: str) -> str:
+    return re.sub(r"^[A-F]\.\s+", "", option.strip(), count=1)
+
+
+def _has_threshold_or_deadline_boundary(question: str) -> bool:
+    without_as_of = re.sub(
+        r"^\s*as\s+of\s+20\d{2}[-/]\d{1,2}[-/]\d{1,2},?\s*",
+        "",
+        question,
+        flags=re.IGNORECASE,
+    )
+    return any(
+        re.search(pattern, without_as_of, flags=re.IGNORECASE)
+        for pattern in THRESHOLD_OR_DEADLINE_PATTERNS
+    )
+
+
+def _meaningful_tokens(text: str) -> set[str]:
+    return {
+        _normalize_token(token)
+        for token in MEANINGFUL_TOKEN_PATTERN.findall(text.lower())
+        if len(token) > 2 and token not in REWRITE_STOPWORDS
+    }
+
+
+def _normalize_token(token: str) -> str:
+    if len(token) > 4 and token.endswith("ies"):
+        return f"{token[:-3]}y"
+    if len(token) > 4 and token.endswith("ed"):
+        return token[:-2]
+    if len(token) > 4 and token.endswith("ing"):
+        return token[:-3]
+    if len(token) > 3 and token.endswith("s"):
+        return token[:-1]
+    return token
 
 
 def _contains_cjk(*values: str) -> bool:

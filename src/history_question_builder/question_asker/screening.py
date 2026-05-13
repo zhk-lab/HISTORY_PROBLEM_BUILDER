@@ -21,6 +21,10 @@ HIGH_PRIORITY_SOURCES = {
 PRIMARY_DOMAINS = {"politics", "macro", "public_risk"}
 LOW_PRIORITY_DOMAINS = {"sports", "entertainment"}
 
+# Coarse topic signals that usually deserve model review. These are not meant
+# to prove that an event is predictable; they only identify domains where good
+# prediction questions are common, such as elections, macro releases, courts,
+# sanctions, disasters, and official reopening/restoration milestones.
 HIGH_VALUE_PATTERNS = [
     r"\belection\b",
     r"\breferendum\b",
@@ -61,6 +65,9 @@ HIGH_VALUE_PATTERNS = [
     r"\brestore(?:d|s|ation)?\b",
 ]
 
+# Supplemental topic signals for events that can be useful but are more often
+# lower priority. These include sports finals, awards, rankings, and cultural
+# results, which should usually be gated by domain or an explicit opt-in.
 MEDIUM_VALUE_PATTERNS = [
     r"\bfinal\b",
     r"\bchampionship\b",
@@ -74,6 +81,10 @@ MEDIUM_VALUE_PATTERNS = [
     r"\branking\b",
 ]
 
+# Negative signals for retrospective spot news. If these appear without a
+# separate future-outcome/process signal, the event is likely just reporting
+# something that already happened and should not become a "Will X happen?"
+# rewrite question.
 IMMEDIATE_NEWS_PATTERNS = [
     r"\battack(?:ed|s)?\b",
     r"\bkilled\b",
@@ -87,6 +98,10 @@ IMMEDIATE_NEWS_PATTERNS = [
     r"\bstrike(?:s|d)?\b",
 ]
 
+# Signals that an event may have an objective process, decision point, deadline,
+# vote, ruling, result, or announcement. These keywords are intentionally broad:
+# they should rescue borderline events from immediate-news rejection, not serve
+# as final proof that the event can produce a valid question.
 FUTURE_OUTCOME_PATTERNS = [
     r"\bceasefire\b",
     r"\bdeadline\b",
@@ -159,3 +174,4 @@ def _event_text(event: CandidateEvent) -> str:
 
 def _matches_any(patterns: list[str], text: str) -> bool:
     return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in patterns)
+

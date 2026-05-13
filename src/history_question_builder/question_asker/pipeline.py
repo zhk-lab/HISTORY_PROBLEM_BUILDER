@@ -92,10 +92,22 @@ def run() -> int:
     events = load_events_jsonl(input_path)
     selected: list[CandidateEvent] = []
     rejected: list[RejectedQuestionEvent] = []
+    selected_event_keys: set[str] = set()
 
     for event in events:
         decision = screen_event(event, include_low_priority=args.include_low_priority)
         if decision.selected:
+            event_key = _event_dedupe_key(event)
+            if event_key in selected_event_keys:
+                rejected.append(
+                    RejectedQuestionEvent.from_event(
+                        event,
+                        reject_stage="pre_screen",
+                        reject_reason="duplicate_event",
+                    )
+                )
+                continue
+            selected_event_keys.add(event_key)
             selected.append(event)
             continue
         rejected.append(
@@ -108,11 +120,23 @@ def run() -> int:
 
     selected_for_agent = selected[: args.limit] if args.limit is not None else selected
     candidates: list[QuestionCandidate] = []
+    candidate_question_keys: set[str] = set()
 
     for event in selected_for_agent:
         result = agent.generate(event)
         if result.status == "candidate" and result.candidate is not None:
             candidate = QuestionCandidate.from_agent_payload(event, result.candidate)
+            question_key = _question_dedupe_key(candidate.question)
+            if question_key in candidate_question_keys:
+                rejected.append(
+                    RejectedQuestionEvent.from_event(
+                        event,
+                        reject_stage="validation",
+                        reject_reason="duplicate_question_candidate",
+                    )
+                )
+                continue
+            candidate_question_keys.add(question_key)
             candidate.risk_flags = validate_question(event, candidate)
             candidates.append(candidate)
             continue
@@ -184,6 +208,28 @@ def _env_default_provider() -> str:
     import os
 
     return os.getenv("QUESTION_AGENT_PROVIDER", "mock").strip() or "mock"
+
+
+def _event_dedupe_key(event: CandidateEvent) -> str:
+    """Return a stable key for duplicate current-events records."""
+    body = event.summary or event.title
+    return "|".join(
+        [
+            event.event_date.isoformat(),
+            _normalize_for_dedupe(body),
+        ]
+    )
+
+
+def _question_dedupe_key(question: str) -> str:
+    """Return a stable key for duplicate generated questions."""
+    return _normalize_for_dedupe(question)
+
+
+def _normalize_for_dedupe(value: str) -> str:
+    cleaned = value.strip().lower()
+    cleaned = re.sub(r"[^\w%]+", " ", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip()
 
 
 def main() -> int:
