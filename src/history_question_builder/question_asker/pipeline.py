@@ -45,19 +45,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--agent-provider",
         default=None,
-        choices=["mock", "openai_compatible"],
+        choices=["mock", "chat_completions"],
         help="Generation provider. Defaults to QUESTION_AGENT_PROVIDER or mock.",
     )
     parser.add_argument(
         "--model",
         default=None,
-        help="Model name for openai_compatible provider. Defaults to QUESTION_AGENT_MODEL.",
+        help="Model name for chat_completions provider. Defaults to QUESTION_AGENT_MODEL.",
     )
     parser.add_argument(
         "--temperature",
         type=float,
         default=0.2,
-        help="Model temperature for openai_compatible provider (default: 0.2).",
+        help="Model temperature for chat_completions provider (default: 0.2).",
     )
     parser.add_argument(
         "--max-retries",

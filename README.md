@@ -88,23 +88,26 @@ ask-questions --input data/event/events_2026-05-01_to_2026-05-10.jsonl --output-
 调用真实大模型生成问题：
 
 ```bash
-ask-questions --input data/event/events_2026-05-01_to_2026-05-10.jsonl --output-dir data/questions --agent-provider openai_compatible --model gpt-4.1-mini
+ask-questions --input data/event/events_2026-05-01_to_2026-05-10.jsonl --output-dir data/questions --agent-provider chat_completions --model gpt-4.1-mini
 ```
 
 也可以使用模块方式运行：
 
 ```bash
-python -m history_question_builder.question_asker.pipeline --input data/event/events_2026-05-01_to_2026-05-10.jsonl --output-dir data/questions --agent-provider openai_compatible --model gpt-4.1-mini
+python -m history_question_builder.question_asker.pipeline --input data/event/events_2026-05-01_to_2026-05-10.jsonl --output-dir data/questions --agent-provider chat_completions --model gpt-4.1-mini
 ```
 
 调用真实模型前，需要在项目根目录 `.env` 中配置：
 
 ```env
-OPENAI_API_KEY=你的 API key
-QUESTION_AGENT_PROVIDER=openai_compatible
+QUESTION_AGENT_API_KEY=你的 API key
+QUESTION_AGENT_BASE_URL=https://api.openai.com/v1/chat/completions
+QUESTION_AGENT_PROVIDER=chat_completions
 QUESTION_AGENT_MODEL=gpt-4.1-mini
 QUESTION_AGENT_TEMPERATURE=0.2
 ```
+
+`QUESTION_AGENT_BASE_URL` 可以换成其他厂商的 Chat Completions-compatible API 地址。
 
 常用参数：
 
@@ -112,7 +115,7 @@ QUESTION_AGENT_TEMPERATURE=0.2
 --input                 输入事件 JSONL
 --output-dir            问题输出目录
 --limit                 最多发送多少条事件给 agent
---agent-provider        mock 或 openai_compatible
+--agent-provider        mock 或 chat_completions
 --model                 使用真实模型时的模型名
 --temperature           模型温度，默认 0.2
 --max-retries           模型输出解析失败时的最大重试次数

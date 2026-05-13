@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import sys
 import unittest
 from datetime import date
@@ -13,7 +14,11 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from history_question_builder.event_crawler.models import CandidateEvent
-from history_question_builder.question_asker.agent import parse_agent_output
+from history_question_builder.question_asker.agent import (
+    ChatCompletionsQuestionAgent,
+    build_question_agent,
+    parse_agent_output,
+)
 from history_question_builder.question_asker.models import (
     CANDIDATE_FIELDNAMES,
     REJECTED_FIELDNAMES,
@@ -122,6 +127,35 @@ class QuestionPipelineTests(unittest.TestCase):
         self.assertEqual(candidate.status, "candidate")
         self.assertEqual(rejected.status, "rejected")
         self.assertEqual(bad.status, "parse_error")
+
+    def test_chat_completions_agent_can_be_built_from_generic_env(self) -> None:
+        original_values = {
+            key: os.environ.get(key)
+            for key in [
+                "QUESTION_AGENT_API_KEY",
+                "QUESTION_AGENT_BASE_URL",
+                "QUESTION_AGENT_MODEL",
+            ]
+        }
+        try:
+            os.environ["QUESTION_AGENT_API_KEY"] = "test-key"
+            os.environ["QUESTION_AGENT_BASE_URL"] = "https://vendor.example/v1"
+            os.environ["QUESTION_AGENT_MODEL"] = "vendor-model"
+
+            agent = build_question_agent(
+                provider="chat_completions",
+                model=None,
+                temperature=0.2,
+                max_retries=0,
+            )
+        finally:
+            for key, value in original_values.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        self.assertIsInstance(agent, ChatCompletionsQuestionAgent)
 
     def test_validation_flags_common_risks(self) -> None:
         event = _event(

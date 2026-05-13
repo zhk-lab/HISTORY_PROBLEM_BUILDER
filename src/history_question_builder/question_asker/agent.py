@@ -156,8 +156,8 @@ class MockQuestionAgent(QuestionAgent):
         return AgentResult(status="candidate", candidate=payload)
 
 
-class OpenAICompatibleQuestionAgent(QuestionAgent):
-    """Agent backed by an OpenAI-compatible chat completions endpoint."""
+class ChatCompletionsQuestionAgent(QuestionAgent):
+    """Agent backed by a Chat Completions-compatible endpoint."""
 
     def __init__(
         self,
@@ -185,14 +185,19 @@ class OpenAICompatibleQuestionAgent(QuestionAgent):
         model: str | None = None,
         temperature: float | None = None,
         max_retries: int = 2,
-    ) -> "OpenAICompatibleQuestionAgent":
+    ) -> "ChatCompletionsQuestionAgent":
         resolved_model = model or os.getenv("QUESTION_AGENT_MODEL")
         if not resolved_model:
             raise ValueError("--model or QUESTION_AGENT_MODEL is required")
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = os.getenv("QUESTION_AGENT_API_KEY")
         if not api_key:
-            raise ValueError("OPENAI_API_KEY is required for openai_compatible provider")
-        base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1/chat/completions")
+            raise ValueError(
+                "QUESTION_AGENT_API_KEY is required for chat_completions provider"
+            )
+        base_url = os.getenv(
+            "QUESTION_AGENT_BASE_URL",
+            "https://api.openai.com/v1/chat/completions",
+        )
         resolved_temperature = (
             temperature
             if temperature is not None
@@ -255,8 +260,8 @@ def build_question_agent(
     """Factory used by the CLI."""
     if provider == "mock":
         return MockQuestionAgent()
-    if provider == "openai_compatible":
-        return OpenAICompatibleQuestionAgent.from_env(
+    if provider == "chat_completions":
+        return ChatCompletionsQuestionAgent.from_env(
             model=model, temperature=temperature, max_retries=max_retries
         )
     raise ValueError(f"Unknown agent provider: {provider}")
