@@ -153,6 +153,59 @@ class QuestionPipelineTests(unittest.TestCase):
         self.assertIn("weak_or_missing_resolution_source", flags)
         self.assertIn("ground_truth_not_direct_answer", flags)
 
+    def test_validation_flags_mechanical_structure_errors(self) -> None:
+        event = _event(
+            source="fomc_calendar",
+            domain="macro",
+            title="FOMC meeting",
+            summary="Federal Reserve decision summary.",
+        )
+        candidate = QuestionCandidate(
+            question_id="test",
+            event_id=event.event_id,
+            domain="unknown",
+            event_name="FOMC meeting",
+            question="On 2026-05-01, what will happen?",
+            prediction_date="2026-05-01",
+            ground_truth="A" * 1201,
+            resolution_source="not-a-url",
+            event_summary="test event summary",
+        )
+
+        flags = validate_question(event, candidate)
+
+        self.assertIn("invalid_question_domain", flags)
+        self.assertIn("unclear_resolution_criteria", flags)
+        self.assertIn("invalid_resolution_source_url", flags)
+        self.assertIn("ground_truth_length_abnormal", flags)
+        self.assertIn("prediction_date_may_be_invalid", flags)
+        self.assertIn("needs_external_fact_check", flags)
+
+    def test_validation_accepts_structurally_clean_question(self) -> None:
+        event = _event(
+            source="fomc_calendar",
+            domain="macro",
+            title="FOMC meeting",
+            summary="Federal Reserve decision summary.",
+            evidence_urls=["https://www.federalreserve.gov/monetarypolicy.htm"],
+        )
+        payload = parse_agent_output(
+            json.dumps(
+                {
+                    "event_name": "FOMC meeting",
+                    "domain": "macro",
+                    "question": "On 2026-05-01, what will the federal funds target range be?",
+                    "prediction_date": "2026-04-30",
+                    "ground_truth": "4.25%-4.50%",
+                    "resolution_source": "https://www.federalreserve.gov/monetarypolicy.htm",
+                }
+            )
+        ).candidate
+        self.assertIsNotNone(payload)
+        candidate = QuestionCandidate.from_agent_payload(event, payload)
+
+        self.assertEqual(validate_question(event, candidate), [])
+
     def test_load_events_jsonl(self) -> None:
         event = _event(
             source="ifes_electionguide",
