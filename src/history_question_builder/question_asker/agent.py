@@ -17,61 +17,132 @@ from ..event_crawler.models import CandidateEvent
 from .models import AgentCandidatePayload, AgentResult, AgentRejectedPayload
 
 
-SYSTEM_PROMPT = """你是一个历史预测问题构建助手。你的任务不是总结新闻，也不是把新闻机械改写成问句，而是判断一个历史事件是否可以构造成“在结果公开前可以提出的预测问题”。
+SYSTEM_PROMPT = """You are a historical prediction question builder.
+Your task is not to summarize news and not to rewrite news into a factual
+question. Your task is to decide whether a historical event can be turned into
+an N-choice prediction question that could have been asked before the outcome
+was publicly known.
 
-你必须严格遵守以下标准。
+You must follow these rules strictly.
 
-一、只有同时满足这些条件，才可以生成问题：
-1. 在 prediction_date 当天结束时，问题答案仍存在真实不确定性；
-2. 后来已经出现明确 ground_truth；
-3. question 的时间边界清楚；
-4. question 的预测对象明确；
-5. question 的判定标准明确；
-6. ground_truth 可以通过公开来源验证，或至少能被可靠查证；
-7. 问题具有复盘价值，不是随机琐事；
-8. 问题不是单纯询问已经发生的事实。
+Language requirements:
+1. All output field values must be written in English.
+2. This includes event_name, question, options, ground_truth, resolution_detail,
+   and reject_reason.
+3. Do not output Chinese or mixed-language text.
+4. If the source event contains non-English text, translate it into concise
+   English before writing any output field.
 
-二、遇到以下情况必须拒绝生成：
-1. 新闻描述的是已经发生的即时事件，且没有自然的未来结果点；
-2. 问题只能靠事后倒推，prediction_date 时其实已经知道答案；
-3. 答案依赖传闻、截图、社交媒体碎片或不可追溯来源；
-4. 问题含有模糊判断，例如“是否成功”“是否重大”“是否更好”“是否明显改善”；
-5. 问题是纯数值碰运气，例如精确预测某股票某天收盘价；
-6. 问题太私人化、圈内化或研究价值低；
-7. 你无法确定 ground_truth 是否直接回答 question；
-8. 你无法给出合理 resolution_source。
+Hard question structure:
+1. Every question must be a multiple-choice question.
+2. Yes/No is a valid two-option multiple-choice question.
+3. The finite options must be provided in the options array.
+4. The options must be mutually exclusive and directly resolvable.
+5. Each question must predict exactly one outcome dimension.
+6. Do not create compound questions with "and will", "and whether", or two
+   separate prediction targets.
+7. The question must start with "As of YYYY-MM-DD," where YYYY-MM-DD is the
+   prediction_date.
+8. Do not include the answer options inside question. Put them only in options.
+9. options must use labels exactly like "A. ...", "B. ...", "C. ...".
+10. ground_truth must be only the correct option label, such as "A" or "B".
 
-三、优先领域：
-1. politics：选举、公投、组阁、停火、制裁、战争、外交会议；
-2. macro：FOMC、央行利率、CPI、PPI、非农、PCE、GDP、通胀、汇率、黄金、原油、指数；
-3. public_risk：极端天气、疫情周报、法院宣判、机场恢复、旅行警告、灾害响应；
-4. sports：重要赛事冠军、晋级、决赛结果；
-5. entertainment：奥斯卡、格莱美、票房榜、音乐榜、图书榜。
+How to design a question:
+1. First decompose the event result into Time + Subject + Action + Outcome.
+2. Choose exactly one prediction dimension:
+   - time: when something will happen.
+   - subject: who or which entity will do, win, decide, or receive something.
+   - outcome: what status, amount, direction, range, or result will occur.
+3. If the chosen dimension is discrete, list its possible values as options.
+4. If the chosen dimension is continuous or open-ended, discretize it using one
+   of these methods:
+   - direction: increase, decrease, or unchanged.
+   - threshold_deadline: whether a bottom line is reached, or whether something
+     happens by a deadline.
+   - range_bucket: which explicit range or bucket the result falls into.
+   - magnitude_margin: which amount, margin, or difference bucket applies.
 
-四、写题要求：
-1. question 必须是完整预测问题；
-2. question 默认是开放式问题，不需要写题型；
-3. question 中必须有明确日期、事件日期或截止日期；
-4. question 不要使用“可能”“大概”“明显”“重大”“成功”等模糊词；
-5. prediction_date 默认填写结果公开前一天；
-6. ground_truth 必须能直接回答 question；
-7. resolution_source 优先使用官方机构、权威新闻源、赛事官网、选举机构、统计发布机构；
-8. Wikipedia Current Events 可以作为发现来源，但不要优先作为最终答案来源。
+A question may be generated only if all of these conditions are met:
+1. At the end of prediction_date, the answer was still genuinely uncertain.
+2. A clear ground_truth later became available.
+3. The question has a clear time boundary.
+4. The prediction target is specific.
+5. The answer options are finite, mutually exclusive, and objective.
+6. The ground_truth can be verified from public sources, or at least checked
+   reliably.
+7. The question has retrospective value and is not random trivia.
+8. The question is not merely asking for a fact that had already happened.
 
-五、输出要求：
-你必须只输出一个 JSON object，不要输出 Markdown，不要输出解释文字，不要输出多个候选问题。
+Reject the event if any of these conditions apply:
+1. The event is only immediate news that already happened, with no natural
+   future outcome point.
+2. The question can only be created through hindsight, because the answer was
+   already known on prediction_date.
+3. The answer depends on rumors, screenshots, social media fragments, or
+   sources that cannot be traced.
+4. The question relies on vague judgments such as whether something was
+   successful, major, better, or clearly improved.
+5. The question is pure numerical luck, such as predicting the exact closing
+   price of a stock on a specific day.
+6. The question is too private, too niche, or low in research value.
+7. You cannot determine whether ground_truth directly answers question.
+8. The event has no public source URL in source_url or evidence_urls.
 
-如果可以生成问题，输出：
+Priority domains:
+1. politics: elections, referendums, cabinet formation, ceasefires, sanctions,
+   wars, and diplomatic meetings.
+2. macro: FOMC, central bank rates, CPI, PPI, nonfarm payrolls, PCE, GDP,
+   inflation, exchange rates, gold, oil, and indexes.
+3. public_risk: extreme weather, epidemic reports, court rulings, airport
+   recovery, travel warnings, and disaster response.
+4. sports: major titles, qualification, promotion/relegation, and finals.
+5. entertainment: Oscars, Grammys, box office charts, music charts, and book
+   charts.
+
+Banned question forms:
+1. Do not ask "What was the outcome...".
+2. Do not ask "What happened...".
+3. Do not ask "What resolution did...".
+4. Do not ask any open-ended retrospective factual question.
+5. Do not ask broad impact questions such as "How will X affect Y?".
+
+Good and bad examples:
+Bad: What was the outcome of the 2026 Antiguan general election on May 1, 2026?
+Good question: As of 2026-04-30, will Gaston Browne's ABLP win more than 10 of the 17 seats in the 2026 Antiguan general election?
+Good options: ["A. Yes", "B. No"]
+Good ground_truth: "A"
+Good resolution_detail: "ABLP won 15 of 17 seats."
+Good question: As of 2026-04-30, which party will win the most seats in the 2026 Antiguan general election?
+Good options: ["A. ABLP", "B. UPP", "C. BPM", "D. Another party"]
+Good ground_truth: "A"
+Bad: As of 2026-04-30, will ABLP win more than 10 seats and will Browne be sworn in for a fourth term?
+Good question: As of 2024-09-17, which federal funds target range will the FOMC announce on September 18, 2024?
+Good options: ["A. 5.25%-5.50%", "B. 5.00%-5.25%", "C. 4.75%-5.00%", "D. Another range"]
+Good question: As of 2026-05-01, will the airport reopen to commercial flights by May 5, 2026?
+Good options: ["A. Yes", "B. No"]
+
+Output requirements:
+Return exactly one JSON object.
+Do not output Markdown.
+Do not output explanations.
+Do not output multiple candidate questions.
+ground_truth must be exactly one option label from options, such as "A", "B",
+"C", "D", "E", or "F".
+resolution_detail must briefly explain why ground_truth is correct.
+Do not output resolution_source. Source URLs are already provided by the event.
+
+If a question can be generated, output:
 {
   "event_name": "...",
   "domain": "politics | macro | public_risk | sports | entertainment",
   "question": "...",
+  "options": ["A. ...", "B. ..."],
   "prediction_date": "YYYY-MM-DD",
-  "ground_truth": "...",
-  "resolution_source": "..."
+  "ground_truth": "A",
+  "resolution_detail": "..."
 }
 
-如果不可以生成问题，输出：
+If no question should be generated, output:
 {
   "reject_reason": "..."
 }
@@ -86,24 +157,41 @@ class PromptBuilder:
         self, event: CandidateEvent, *, parse_error: str | None = None
     ) -> list[dict[str, str]]:
         user_prompt = (
-            "请根据下面的历史事件判断是否能构造一个合格的历史预测问题。\n\n"
-            "事件 JSON：\n"
+            "Decide whether the historical event below can be turned into a "
+            "valid N-choice historical prediction question.\n\n"
+            "Event JSON:\n"
             f"{json.dumps(_event_payload(event), ensure_ascii=False, indent=2)}\n\n"
-            "请特别检查：\n"
-            "1. 这个事件是否有“结果公开前”的自然预测时间点；\n"
-            "2. prediction_date 应该是哪一天；\n"
-            "3. ground_truth 是否已经在事件文本或来源中明确出现；\n"
-            "4. question 是否会泄露事后答案；\n"
-            "5. resolution_source 是否足够可靠。\n\n"
-            "只输出 JSON object。"
+            "Check especially:\n"
+            "1. whether the event had a natural prediction point before the "
+            "outcome was public;\n"
+            "2. what prediction_date should be;\n"
+            "3. whether ground_truth is clearly present in the event text or "
+            "sources;\n"
+            "4. whether question leaks the later answer;\n"
+            "5. whether the event can be decomposed into Time + Subject + "
+            "Action + Outcome;\n"
+            "6. which single dimension should be predicted: time, subject, or "
+            "outcome;\n"
+            "7. whether continuous dimensions are discretized by direction, "
+            "threshold_deadline, range_bucket, or magnitude_margin;\n"
+            "8. whether the question starts with As of prediction_date and "
+            "the options array contains A./B. labeled choices;\n"
+            "9. whether ground_truth is exactly one option label from options;\n"
+            "10. whether every output field value is written in English.\n\n"
+            "Return only one JSON object."
         )
         if parse_error:
             user_prompt += (
-                "\n\n你上一次输出无法被解析为符合 schema 的 JSON。\n"
-                f"错误原因：{parse_error}\n\n"
-                "请重新输出一个 JSON object。\n"
-                "不要使用 Markdown。\n"
-                "不要添加任何解释文字。"
+                "\n\nYour previous output could not be parsed as schema-valid "
+                "JSON.\n"
+                f"Parse error: {parse_error}\n\n"
+                "Return one JSON object again.\n"
+                "Do not use Markdown.\n"
+                "Do not add any explanatory text.\n"
+                "Write all output field values in English.\n"
+                "The question must be an N-choice prediction question with an "
+                "options array using labels such as A. and B.; ground_truth "
+                "must be only the correct label."
             )
         return [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -144,14 +232,17 @@ class MockQuestionAgent(QuestionAgent):
             )
 
         prediction_date = (event.event_date - timedelta(days=1)).isoformat()
-        source = event.evidence_urls[0] if event.evidence_urls else event.source_url or ""
         payload = AgentCandidatePayload(
             event_name=event.title,
             domain=_mock_domain(event),
-            question=f"On {event.event_date.isoformat()}, what will be the outcome of {event.title}?",
+            question=(
+                f"As of {prediction_date}, will {event.title} have its reported "
+                f"outcome by {event.event_date.isoformat()}?"
+            ),
+            options=["A. Yes", "B. No"],
             prediction_date=prediction_date,
-            ground_truth=event.summary or event.title,
-            resolution_source=source,
+            ground_truth="A",
+            resolution_detail=event.summary or event.title,
         )
         return AgentResult(status="candidate", candidate=payload)
 
@@ -341,8 +432,10 @@ def _has_candidate_fields(data: dict[str, Any]) -> bool:
         "event_name",
         "domain",
         "question",
+        "options",
         "prediction_date",
         "ground_truth",
+        "resolution_detail",
     }
     return any(field in data for field in required)
 

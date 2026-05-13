@@ -16,13 +16,14 @@ CANDIDATE_FIELDNAMES = [
     "event_id",
     "domain",
     "event_name",
-    "question",
-    "prediction_date",
-    "ground_truth",
-    "resolution_source",
-    "risk_flags",
     "event_summary",
     "source_urls",
+    "question",
+    "options",
+    "prediction_date",
+    "ground_truth",
+    "resolution_detail",
+    "risk_flags",
     "review_status",
     "review_notes",
 ]
@@ -88,9 +89,10 @@ class AgentCandidatePayload(BaseModel):
     event_name: str
     domain: str
     question: str
+    options: list[str]
     prediction_date: str
     ground_truth: str
-    resolution_source: str = ""
+    resolution_detail: str = ""
 
 
 class AgentRejectedPayload(BaseModel):
@@ -122,9 +124,10 @@ class QuestionCandidate(BaseModel):
     domain: str
     event_name: str
     question: str
+    options: list[str] = Field(default_factory=list)
     prediction_date: str
     ground_truth: str
-    resolution_source: str = ""
+    resolution_detail: str = ""
     risk_flags: list[str] = Field(default_factory=list)
     event_summary: str
     source_urls: str = ""
@@ -148,9 +151,10 @@ class QuestionCandidate(BaseModel):
             domain=domain,
             event_name=payload.event_name.strip(),
             question=question,
+            options=[option.strip() for option in payload.options if option.strip()],
             prediction_date=payload.prediction_date.strip(),
             ground_truth=payload.ground_truth.strip(),
-            resolution_source=preferred_resolution_source(event, payload),
+            resolution_detail=payload.resolution_detail.strip(),
             risk_flags=risk_flags or [],
             event_summary=event_summary_text(event),
             source_urls=source_urls_text(event),
@@ -165,7 +169,9 @@ class QuestionCandidate(BaseModel):
         """Flatten list values for CSV review."""
         data = self.as_serializable_dict()
         return {
-            field: "; ".join(data[field]) if field == "risk_flags" else str(data[field])
+            field: "; ".join(data[field])
+            if field in {"options", "risk_flags"}
+            else str(data[field])
             for field in CANDIDATE_FIELDNAMES
         }
 
@@ -218,13 +224,3 @@ def normalize_question_domain(value: str, *, fallback: str = "") -> str:
         return "politics"
     return "politics"
 
-
-def preferred_resolution_source(
-    event: CandidateEvent, payload: AgentCandidatePayload
-) -> str:
-    """Use the agent source first, then fall back to event evidence URLs."""
-    if payload.resolution_source.strip():
-        return payload.resolution_source.strip()
-    if event.evidence_urls:
-        return event.evidence_urls[0].strip()
-    return (event.source_url or "").strip()

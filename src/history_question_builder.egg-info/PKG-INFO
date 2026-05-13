@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: history-question-builder
+Version: 0.1.0
+Summary: Crawl historical events and generate reviewable historical prediction questions.
+Requires-Python: >=3.12
+Requires-Dist: requests
+Requires-Dist: beautifulsoup4
+Requires-Dist: lxml
+Requires-Dist: python-dateutil
+Requires-Dist: pydantic
+Requires-Dist: python-dotenv
+Requires-Dist: tenacity
+Requires-Dist: tqdm

@@ -1,0 +1,3 @@
+[console_scripts]
+ask-questions = history_question_builder.question_asker.pipeline:main
+crawl-events = history_question_builder.event_crawler.cli:main

@@ -23,7 +23,7 @@ def ensure_question_output_dir(output_dir: Path) -> None:
 def write_question_candidates_jsonl(
     path: Path, candidates: Iterable[QuestionCandidate]
 ) -> None:
-    """Write review candidates as JSONL with the public 13-field schema."""
+    """Write review candidates as JSONL with the public candidate schema."""
     with path.open("w", encoding="utf-8") as handle:
         for candidate in candidates:
             handle.write(

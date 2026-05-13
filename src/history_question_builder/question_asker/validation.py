@@ -18,7 +18,7 @@ from .models import ALLOWED_QUESTION_DOMAINS, QuestionCandidate
 
 MIN_QUESTION_CHARS = 20
 MAX_QUESTION_CHARS = 280
-MAX_GROUND_TRUTH_CHARS = 1200
+MAX_RESOLUTION_DETAIL_CHARS = 1200
 
 DATE_OR_TIME_PATTERNS = [
     r"\b20\d{2}[-/]\d{1,2}[-/]\d{1,2}\b",
@@ -61,18 +61,24 @@ BANNED_BROAD_QUESTION_PATTERNS = [
     r"会如何影响",
 ]
 
-DISALLOWED_RESOLUTION_SOURCE_HOSTS = [
-    "wikipedia.org",
-]
+CJK_PATTERN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+OPTION_LABEL_PATTERN = re.compile(r"^[A-F]\. .+")
+GROUND_TRUTH_LABEL_PATTERN = re.compile(r"^[A-F]$")
 
 
 def validate_question(event: CandidateEvent, candidate: QuestionCandidate) -> list[str]:
     """Return objective review risk flags without rejecting the candidate."""
     flags: list[str] = []
+    event_name = candidate.event_name.strip()
     question = candidate.question.strip()
     question_lower = question.lower()
+    options = [option.strip() for option in candidate.options]
     ground_truth = candidate.ground_truth.strip()
-    resolution_source = candidate.resolution_source.strip()
+    resolution_detail = candidate.resolution_detail.strip()
+    source_urls = candidate.source_urls.strip()
+
+    if _contains_cjk(event_name, question, *options, ground_truth, resolution_detail):
+        flags.append("non_english_output")
 
     if candidate.domain not in ALLOWED_QUESTION_DOMAINS:
         flags.append("invalid_question_domain")
@@ -89,25 +95,34 @@ def validate_question(event: CandidateEvent, candidate: QuestionCandidate) -> li
     if _has_broad_question_pattern(question_lower):
         flags.append("unclear_resolution_criteria")
 
-    if not resolution_source:
-        flags.append("weak_or_missing_resolution_source")
-    elif not _is_valid_http_url(resolution_source):
-        flags.append("invalid_resolution_source_url")
-    elif _is_disallowed_resolution_source(resolution_source):
-        flags.append("weak_or_missing_resolution_source")
+    if not options or len(options) < 2:
+        flags.append("missing_choice_options")
+    elif len(options) > 6:
+        flags.append("too_many_choice_options")
+
+    if _has_duplicate_options(options):
+        flags.append("duplicate_choice_options")
+
+    if options and not _has_valid_option_labels(options):
+        flags.append("invalid_choice_option_label")
 
     if not ground_truth:
         flags.append("ground_truth_not_direct_answer")
-    elif _ground_truth_length_is_abnormal(ground_truth):
-        flags.append("ground_truth_length_abnormal")
+    elif not _ground_truth_matches_options(ground_truth, options):
+        flags.append("ground_truth_not_in_options")
+
+    if resolution_detail and _resolution_detail_length_is_abnormal(resolution_detail):
+        flags.append("resolution_detail_length_abnormal")
+
+    if not source_urls:
+        flags.append("weak_or_missing_source_urls")
+    elif not _has_valid_source_urls(source_urls):
+        flags.append("invalid_source_urls")
 
     if _prediction_date_may_be_invalid(candidate.prediction_date, event):
         flags.append("prediction_date_may_be_invalid")
 
-    if (
-        "weak_or_missing_resolution_source" in flags
-        or "invalid_resolution_source_url" in flags
-    ):
+    if "weak_or_missing_source_urls" in flags or "invalid_source_urls" in flags:
         flags.append("needs_external_fact_check")
 
     return _dedupe(flags)
@@ -129,8 +144,8 @@ def _question_length_is_abnormal(question: str) -> bool:
     return len(question) < MIN_QUESTION_CHARS or len(question) > MAX_QUESTION_CHARS
 
 
-def _ground_truth_length_is_abnormal(ground_truth: str) -> bool:
-    return len(ground_truth) > MAX_GROUND_TRUTH_CHARS
+def _resolution_detail_length_is_abnormal(resolution_detail: str) -> bool:
+    return len(resolution_detail) > MAX_RESOLUTION_DETAIL_CHARS
 
 
 def _has_broad_question_pattern(question_lower: str) -> bool:
@@ -138,6 +153,31 @@ def _has_broad_question_pattern(question_lower: str) -> bool:
         re.search(pattern, question_lower, flags=re.IGNORECASE)
         for pattern in BANNED_BROAD_QUESTION_PATTERNS
     )
+
+
+def _contains_cjk(*values: str) -> bool:
+    return any(CJK_PATTERN.search(value) for value in values)
+
+
+def _has_duplicate_options(options: list[str]) -> bool:
+    normalized = [option.lower() for option in options]
+    return len(normalized) != len(set(normalized))
+
+
+def _has_valid_option_labels(options: list[str]) -> bool:
+    expected_labels = [chr(ord("A") + index) for index in range(len(options))]
+    actual_labels = []
+    for option in options:
+        if not OPTION_LABEL_PATTERN.match(option):
+            return False
+        actual_labels.append(option[0])
+    return actual_labels == expected_labels
+
+
+def _ground_truth_matches_options(ground_truth: str, options: list[str]) -> bool:
+    if not GROUND_TRUTH_LABEL_PATTERN.match(ground_truth):
+        return False
+    return ground_truth in {option[0] for option in options if option}
 
 
 def _prediction_date_may_be_invalid(prediction_date: str, event: CandidateEvent) -> bool:
@@ -153,15 +193,9 @@ def _is_valid_http_url(url: str) -> bool:
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
-def _is_disallowed_resolution_source(url: str) -> bool:
-    parsed = urlparse(url)
-    host = parsed.netloc.lower()
-    path = parsed.path.lower()
-    is_disallowed_host = any(
-        host == item or host.endswith(f".{item}")
-        for item in DISALLOWED_RESOLUTION_SOURCE_HOSTS
-    )
-    return is_disallowed_host and "portal:current_events" in path
+def _has_valid_source_urls(source_urls: str) -> bool:
+    urls = [url.strip() for url in source_urls.split(";") if url.strip()]
+    return bool(urls) and all(_is_valid_http_url(url) for url in urls)
 
 
 def _dedupe(flags: list[str]) -> list[str]:
