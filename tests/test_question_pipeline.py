@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import csv
 import json
@@ -132,8 +132,114 @@ class QuestionPipelineTests(unittest.TestCase):
         )
         decision = screen_event(event)
         self.assertFalse(decision.selected)
-        self.assertEqual(decision.reason, "immediate_news_without_future_result")
+        self.assertEqual(decision.reason, "immediate_news_without_forecast_setup")
 
+    def test_pre_screen_keeps_structured_keyword_combos(self) -> None:
+        examples = [
+            _event(
+                source="wikipedia_current_events",
+                domain="other",
+                title="Football cup final",
+                summary="Club A beats Club B 2-0 in the final to win the cup.",
+            ),
+            _event(
+                source="wikipedia_current_events",
+                domain="politics",
+                title="Supreme Court ruling",
+                summary="The Supreme Court rules that the tariff policy is illegal.",
+            ),
+            _event(
+                source="wikipedia_current_events",
+                domain="politics",
+                title="No-confidence vote",
+                summary="Parliament votes 281-4 to pass a motion of no confidence.",
+            ),
+            _event(
+                source="wikipedia_current_events",
+                domain="macro",
+                title="Cambodia-Thailand relations",
+                summary="Cambodia and Thailand agree to restore relations following mediated talks.",
+            ),
+            _event(
+                source="wikipedia_current_events",
+                domain="other",
+                title="Australia-Japan relations",
+                summary="Australia and Japan sign agreements on energy and critical minerals.",
+            ),
+            _event(
+                source="wikipedia_current_events",
+                domain="other",
+                title="European Political Community Summit",
+                summary="The summit is held with leaders from nearly 50 countries participating.",
+            ),
+            _event(
+                source="wikipedia_current_events",
+                domain="politics",
+                title="Welsh Labour",
+                summary="The First Minister of Wales resigns after losing her seat.",
+            ),
+            _event(
+                source="wikipedia_current_events",
+                domain="other",
+                title="MPs",
+                summary="The prime minister is ousted following a successful no-confidence motion of 26-22.",
+            ),
+            _event(
+                source="wikipedia_current_events",
+                domain="other",
+                title="Labour Party",
+                summary="The Labour Party concedes defeat while the Scottish National Party claims victory.",
+            ),
+        ]
+
+        for event in examples:
+            with self.subTest(event=event.title):
+                self.assertTrue(screen_event(event).selected)
+
+    def test_pre_screen_rejects_activity_without_result(self) -> None:
+        voters_event = _event(
+            source="wikipedia_current_events",
+            domain="politics",
+            title="2026 local elections",
+            summary="Voters in England elect six mayors and 5,066 council seats.",
+        )
+        debate_event = _event(
+            source="wikipedia_current_events",
+            domain="politics",
+            title="Parliament debate",
+            summary="The parliament debates a no-confidence motion against the prime minister.",
+        )
+
+        self.assertFalse(screen_event(voters_event).selected)
+        self.assertEqual(
+            screen_event(voters_event).reason,
+            "election_activity_without_result",
+        )
+        self.assertFalse(screen_event(debate_event).selected)
+        self.assertEqual(
+            screen_event(debate_event).reason,
+            "debate_without_decision_result",
+        )
+
+    def test_pre_screen_rejects_uncertain_diplomatic_talks(self) -> None:
+        event = _event(
+            source="wikipedia_current_events",
+            domain="conflict",
+            title="2026 Iran war ceasefire",
+            summary="A newspaper reports that Iran and the United States may resume talks next week.",
+        )
+
+        self.assertFalse(screen_event(event).selected)
+
+    def test_pre_screen_rejects_generic_file_release_rewrite(self) -> None:
+        event = _event(
+            source="wikipedia_current_events",
+            domain="other",
+            title="Investigation of UFO reports by the United States government",
+            summary="The Department of Defense begins releasing classified files and videos.",
+        )
+
+        self.assertFalse(screen_event(event).selected)
     def test_agent_parse_candidate_and_rejected(self) -> None:
         candidate = parse_agent_output(
             """```json
@@ -494,3 +600,7 @@ def _cleanup_test_files(*paths: Path) -> None:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+
