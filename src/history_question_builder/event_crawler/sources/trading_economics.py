@@ -111,7 +111,7 @@ class TradingEconomicsCalendarCrawler(BaseSourceCrawler):
                 CandidateEvent.from_source(
                     source=self.source_name,
                     event_date=event_date,
-                    title=title,
+                    topic=title,
                     summary=summary,
                     domain="macro",
                     source_url=source_url,

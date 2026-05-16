@@ -399,7 +399,7 @@ class MockQuestionAgent(QuestionAgent):
     """Deterministic local agent for tests and dry runs."""
 
     def generate(self, event: CandidateEvent) -> AgentResult:
-        text = " ".join([event.source, event.domain, event.title, event.summary]).lower()
+        text = " ".join([event.source, event.domain, event.topic, event.summary]).lower()
         if not any(
             token in text
             for token in [
@@ -421,16 +421,16 @@ class MockQuestionAgent(QuestionAgent):
 
         prediction_date = (event.event_date - timedelta(days=1)).isoformat()
         payload = AgentCandidatePayload(
-            event_name=event.title,
+            event_name=event.topic,
             domain=_mock_domain(event),
             question=(
-                f"As of {prediction_date}, will {event.title} have its reported "
+                f"As of {prediction_date}, will {event.topic} have its reported "
                 f"outcome by {event.event_date.isoformat()}?"
             ),
             options=["A. Yes", "B. No"],
             prediction_date=prediction_date,
             ground_truth="A",
-            resolution_detail=event.summary or event.title,
+            resolution_detail=event.summary or event.topic,
         )
         return AgentResult(status="candidate", candidate=payload)
 
@@ -594,7 +594,7 @@ def _event_payload(event: CandidateEvent) -> dict[str, Any]:
         "source": event.source,
         "domain": event.domain,
         "event_date": event.event_date.isoformat(),
-        "title": event.title,
+        "topic": event.topic,
         "summary": event.summary,
         "source_url": event.source_url,
         "evidence_urls": event.evidence_urls,

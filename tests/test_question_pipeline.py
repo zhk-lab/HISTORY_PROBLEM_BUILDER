@@ -14,6 +14,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from history_question_builder.event_crawler.models import CandidateEvent
+from history_question_builder.event_crawler.filters import filter_and_enrich_events
 from history_question_builder.question_asker.agent import (
     ChatCompletionsQuestionAgent,
     PromptBuilder,
@@ -65,7 +66,7 @@ class QuestionPipelineTests(unittest.TestCase):
         event = _event(
             source="ifes_electionguide",
             domain="politics",
-            title="2026 Example general election",
+            topic="2026 Example general election",
             summary="Official results show Party A won the most seats.",
             evidence_urls=["https://www.electionguide.org/elections/id/1/"],
         )
@@ -116,7 +117,7 @@ class QuestionPipelineTests(unittest.TestCase):
         event = _event(
             source="fomc_calendar",
             domain="macro",
-            title="FOMC meeting (May 1, 2026)",
+            topic="FOMC meeting (May 1, 2026)",
             summary="Federal Open Market Committee scheduled meeting date.",
         )
         decision = screen_event(event)
@@ -127,7 +128,7 @@ class QuestionPipelineTests(unittest.TestCase):
         event = _event(
             source="wikipedia_current_events",
             domain="other",
-            title="City protest",
+            topic="City protest",
             summary="Police arrested 20 people during a protest.",
         )
         decision = screen_event(event)
@@ -139,74 +140,74 @@ class QuestionPipelineTests(unittest.TestCase):
             _event(
                 source="wikipedia_current_events",
                 domain="other",
-                title="Football cup final",
+                topic="Football cup final",
                 summary="Club A beats Club B 2-0 in the final to win the cup.",
             ),
             _event(
                 source="wikipedia_current_events",
                 domain="politics",
-                title="Supreme Court ruling",
+                topic="Supreme Court ruling",
                 summary="The Supreme Court rules that the tariff policy is illegal.",
             ),
             _event(
                 source="wikipedia_current_events",
                 domain="politics",
-                title="No-confidence vote",
+                topic="No-confidence vote",
                 summary="Parliament votes 281-4 to pass a motion of no confidence.",
             ),
             _event(
                 source="wikipedia_current_events",
                 domain="macro",
-                title="Cambodia-Thailand relations",
+                topic="Cambodia-Thailand relations",
                 summary="Cambodia and Thailand agree to restore relations following mediated talks.",
             ),
             _event(
                 source="wikipedia_current_events",
                 domain="other",
-                title="Australia-Japan relations",
+                topic="Australia-Japan relations",
                 summary="Australia and Japan sign agreements on energy and critical minerals.",
             ),
             _event(
                 source="wikipedia_current_events",
                 domain="other",
-                title="European Political Community Summit",
+                topic="European Political Community Summit",
                 summary="The summit is held with leaders from nearly 50 countries participating.",
             ),
             _event(
                 source="wikipedia_current_events",
                 domain="politics",
-                title="Welsh Labour",
+                topic="Welsh Labour",
                 summary="The First Minister of Wales resigns after losing her seat.",
             ),
             _event(
                 source="wikipedia_current_events",
                 domain="other",
-                title="MPs",
+                topic="MPs",
                 summary="The prime minister is ousted following a successful no-confidence motion of 26-22.",
             ),
             _event(
                 source="wikipedia_current_events",
                 domain="other",
-                title="Labour Party",
+                topic="Labour Party",
                 summary="The Labour Party concedes defeat while the Scottish National Party claims victory.",
             ),
         ]
 
         for event in examples:
-            with self.subTest(event=event.title):
+            with self.subTest(event=event.topic):
                 self.assertTrue(screen_event(event).selected)
 
     def test_pre_screen_rejects_activity_without_result(self) -> None:
         voters_event = _event(
             source="wikipedia_current_events",
             domain="politics",
-            title="2026 local elections",
+            topic="2026 local elections",
             summary="Voters in England elect six mayors and 5,066 council seats.",
         )
         debate_event = _event(
             source="wikipedia_current_events",
             domain="politics",
-            title="Parliament debate",
+            topic="Parliament debate",
             summary="The parliament debates a no-confidence motion against the prime minister.",
         )
 
@@ -225,7 +226,7 @@ class QuestionPipelineTests(unittest.TestCase):
         event = _event(
             source="wikipedia_current_events",
             domain="conflict",
-            title="2026 Iran war ceasefire",
+            topic="2026 Iran war ceasefire",
             summary="A newspaper reports that Iran and the United States may resume talks next week.",
         )
 
@@ -235,7 +236,7 @@ class QuestionPipelineTests(unittest.TestCase):
         event = _event(
             source="wikipedia_current_events",
             domain="other",
-            title="Investigation of UFO reports by the United States government",
+            topic="Investigation of UFO reports by the United States government",
             summary="The Department of Defense begins releasing classified files and videos.",
         )
 
@@ -265,7 +266,7 @@ class QuestionPipelineTests(unittest.TestCase):
         event = _event(
             source="wikipedia_current_events",
             domain="politics",
-            title="Example election",
+            topic="Example election",
             summary="Official results show Party A won.",
         )
         messages = PromptBuilder().build_messages(event)
@@ -347,7 +348,7 @@ class QuestionPipelineTests(unittest.TestCase):
         event = _event(
             source="wikipedia_current_events",
             domain="other",
-            title="City protest",
+            topic="City protest",
             summary="Police arrested 20 people during a protest.",
             source_url=None,
             evidence_urls=[],
@@ -379,7 +380,7 @@ class QuestionPipelineTests(unittest.TestCase):
         event = _event(
             source="wikipedia_current_events",
             domain="politics",
-            title="Example election",
+            topic="Example election",
             summary="Official results show Party A won.",
         )
         candidate = QuestionCandidate(
@@ -404,7 +405,7 @@ class QuestionPipelineTests(unittest.TestCase):
         event = _event(
             source="wikipedia_current_events",
             domain="politics",
-            title="Russia-European Union relations",
+            topic="Russia-European Union relations",
             summary=(
                 "The European Parliament adopts a resolution supporting the "
                 "establishment of a special tribunal to prosecute Russian "
@@ -447,7 +448,7 @@ class QuestionPipelineTests(unittest.TestCase):
         threshold_event = _event(
             source="wikipedia_current_events",
             domain="politics",
-            title="2026 Antiguan general election",
+            topic="2026 Antiguan general election",
             summary=(
                 "Official results indicated that the ABLP led by Gaston "
                 "Browne won 15 of 17 seats."
@@ -464,7 +465,7 @@ class QuestionPipelineTests(unittest.TestCase):
         event = _event(
             source="fomc_calendar",
             domain="macro",
-            title="FOMC meeting",
+            topic="FOMC meeting",
             summary="Federal Reserve decision summary.",
         )
         candidate = QuestionCandidate(
@@ -497,7 +498,7 @@ class QuestionPipelineTests(unittest.TestCase):
         event = _event(
             source="fomc_calendar",
             domain="macro",
-            title="FOMC meeting",
+            topic="FOMC meeting",
             summary="Federal Reserve decision summary.",
             evidence_urls=["https://www.federalreserve.gov/monetarypolicy.htm"],
         )
@@ -523,7 +524,7 @@ class QuestionPipelineTests(unittest.TestCase):
         event = _event(
             source="ifes_electionguide",
             domain="politics",
-            title="2026 Example election",
+            topic="2026 Example election",
             summary="Election result summary.",
         )
         temp = _test_output_dir()
@@ -539,11 +540,38 @@ class QuestionPipelineTests(unittest.TestCase):
         self.assertEqual(len(loaded), 1)
         self.assertEqual(loaded[0].event_id, event.event_id)
 
+    def test_event_filter_dedupes_matching_summaries(self) -> None:
+        first = _event(
+            source="wikipedia_current_events",
+            domain="other",
+            topic="Dubai International Airport",
+            summary="Dubai International Airport reports a 66% drop in passenger traffic.",
+        )
+        duplicate = _event(
+            source="wikipedia_current_events",
+            domain="other",
+            topic="Economic impact of the 2026 Iran war",
+            summary="  dubai international airport reports a 66% drop in passenger traffic.  ",
+        )
+        unique = _event(
+            source="wikipedia_current_events",
+            domain="other",
+            topic="Different event",
+            summary="Another event summary.",
+        )
+
+        kept, dropped = filter_and_enrich_events([first, duplicate, unique])
+
+        self.assertEqual([event.topic for event in kept], [first.topic, unique.topic])
+        self.assertEqual([event.topic for event in dropped], [duplicate.topic])
+        self.assertEqual(dropped[0].filter_reason, "duplicate_summary")
+        self.assertIn("duplicate_summary", dropped[0].quality_flags)
+
     def test_dedupe_keys_ignore_event_title_and_question_punctuation(self) -> None:
         first = _event(
             source="wikipedia_current_events",
             domain="public_risk",
-            title="Dubai International Airport",
+            topic="Dubai International Airport",
             summary=(
                 "Dubai International Airport reports a 66% drop in passenger "
                 "traffic in March 2026."
@@ -552,7 +580,7 @@ class QuestionPipelineTests(unittest.TestCase):
         duplicate = _event(
             source="wikipedia_current_events",
             domain="public_risk",
-            title="Economic impact of the 2026 Iran war",
+            topic="Economic impact of the 2026 Iran war",
             summary=(
                 "Dubai International Airport reports a 66% drop in passenger "
                 "traffic in March 2026."
@@ -570,7 +598,7 @@ def _event(
     *,
     source: str,
     domain: str,
-    title: str,
+    topic: str,
     summary: str,
     source_url: str | None = "https://example.com/source",
     evidence_urls: list[str] | None = None,
@@ -578,7 +606,7 @@ def _event(
     return CandidateEvent.from_source(
         source=source,
         event_date=date(2026, 5, 1),
-        title=title,
+        topic=topic,
         summary=summary,
         domain=domain,
         source_url=source_url,

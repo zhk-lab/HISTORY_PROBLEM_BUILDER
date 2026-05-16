@@ -212,7 +212,7 @@ def _env_default_provider() -> str:
 
 def _event_dedupe_key(event: CandidateEvent) -> str:
     """Return a stable key for duplicate current-events records."""
-    body = event.summary or event.title
+    body = event.summary or event.topic
     return "|".join(
         [
             event.event_date.isoformat(),

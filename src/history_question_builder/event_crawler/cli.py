@@ -110,8 +110,8 @@ def run() -> int:
 
     # 应用基础筛选并排序，保证输出稳定可复现。
     filtered_events, dropped_events = filter_and_enrich_events(all_events)
-    filtered_events.sort(key=lambda e: (e.event_date, e.source, e.title))
-    dropped_events.sort(key=lambda e: (e.event_date, e.source, e.title))
+    filtered_events.sort(key=lambda e: (e.event_date, e.source, e.topic))
+    dropped_events.sort(key=lambda e: (e.event_date, e.source, e.topic))
 
     range_label = f"{start_date.isoformat()}_to_{end_date.isoformat()}"
     jsonl_path = settings.event_output_dir / f"events_{range_label}.jsonl"

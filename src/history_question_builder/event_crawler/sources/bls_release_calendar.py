@@ -82,7 +82,7 @@ class BLSReleaseCalendarCrawler(BaseSourceCrawler):
                     CandidateEvent.from_source(
                         source=self.source_name,
                         event_date=parsed_date,
-                        title=release_name,
+                        topic=release_name,
                         summary=summary,
                         domain="macro",
                         source_url=detail_link or page_url,

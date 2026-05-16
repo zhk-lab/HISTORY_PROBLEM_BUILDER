@@ -160,7 +160,7 @@ class IFESElectionGuideCrawler(BaseSourceCrawler):
         return CandidateEvent.from_source(
             source=self.source_name,
             event_date=event_date,
-            title=title,
+            topic=title,
             summary=summary,
             domain="politics",
             source_url=detail_url,

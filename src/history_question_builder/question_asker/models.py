@@ -58,7 +58,7 @@ def event_summary_text(event: CandidateEvent) -> str:
         [
             event.event_date.isoformat(),
             event.source,
-            clip_text(event.title, limit=220),
+            clip_text(event.topic, limit=220),
             clip_text(event.summary, limit=900),
         ]
     )

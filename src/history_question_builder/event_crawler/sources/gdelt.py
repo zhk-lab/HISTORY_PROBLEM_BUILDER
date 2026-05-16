@@ -74,7 +74,7 @@ class GDELTDocCrawler(BaseSourceCrawler):
                 CandidateEvent.from_source(
                     source=self.source_name,
                     event_date=event_date,
-                    title=title,
+                    topic=title,
                     summary=summary,
                     source_url=source_url,
                     raw={

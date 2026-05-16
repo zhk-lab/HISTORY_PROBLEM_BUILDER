@@ -654,7 +654,7 @@ def _has_office_transition_result(text: str) -> bool:
 
 
 def _event_text(event: CandidateEvent) -> str:
-    return " ".join([event.source, event.domain, event.title, event.summary]).lower()
+    return " ".join([event.source, event.domain, event.topic, event.summary]).lower()
 
 
 def _matches_any(patterns: list[str], text: str) -> bool:

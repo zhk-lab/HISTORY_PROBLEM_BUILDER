@@ -109,7 +109,7 @@ class FREDReleaseCalendarCrawler(BaseSourceCrawler):
                     CandidateEvent.from_source(
                         source=self.source_name,
                         event_date=event_date,
-                        title=release_name,
+                        topic=release_name,
                         summary="FRED economic data release calendar entry.",
                         domain="macro",
                         source_url=release_link,

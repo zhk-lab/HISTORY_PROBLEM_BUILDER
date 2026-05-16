@@ -213,7 +213,7 @@ def _looks_like_low_information_event_rewrite(
     if _has_threshold_or_deadline_boundary(question):
         return False
 
-    event_tokens = _meaningful_tokens(f"{event.title} {event.summary}")
+    event_tokens = _meaningful_tokens(f"{event.topic} {event.summary}")
     question_tokens = _meaningful_tokens(question)
     if not event_tokens or not question_tokens:
         return False

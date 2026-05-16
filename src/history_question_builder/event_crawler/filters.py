@@ -1,25 +1,11 @@
 from __future__ import annotations
 
-"""启发式筛选、领域推断与去重逻辑。"""
+"""领域推断逻辑。"""
 
 import re
 
 from .models import CandidateEvent
 
-_NON_EVENT_PATTERNS = [
-    re.compile(r"\b(opinion|editorial|analysis|preview|outlook)\b", re.IGNORECASE),
-    re.compile(r"\b(photo gallery|podcast|video recap)\b", re.IGNORECASE),
-    re.compile(r"\b(maintenance|site update|about this page)\b", re.IGNORECASE),
-]
-
-_EVENT_HINT_PATTERNS = [
-    re.compile(
-        r"\b(elected|won|approved|rejected|signed|announced|released|"
-        r"killed|injured|struck|meeting|vote|ceasefire|earthquake|flood|"
-        r"hurricane|inflation|interest rate|cpi|ppi|employment|gdp)\b",
-        re.IGNORECASE,
-    )
-]
 
 _DOMAIN_KEYWORDS = {
     "politics": ["election", "parliament", "president", "referendum", "cabinet"],
@@ -48,19 +34,9 @@ _DOMAIN_KEYWORDS = {
 }
 
 
-def _looks_non_event(text: str) -> bool:
-    """判断文本是否更像非事件内容（观点、维护信息等）。"""
-    return any(pattern.search(text) for pattern in _NON_EVENT_PATTERNS)
-
-
-def _looks_event_like(text: str) -> bool:
-    """判断文本是否包含事件动作信号词。"""
-    return any(pattern.search(text) for pattern in _EVENT_HINT_PATTERNS)
-
-
 def _guess_domain(event: CandidateEvent) -> str:
     """通过关键词和来源兜底规则推断粗粒度领域。"""
-    joined = " ".join([event.title, event.summary]).lower()
+    joined = " ".join([event.topic, event.summary]).lower()
     for domain, keywords in _DOMAIN_KEYWORDS.items():
         if any(keyword in joined for keyword in keywords):
             return domain
@@ -76,43 +52,26 @@ def _guess_domain(event: CandidateEvent) -> str:
 def filter_and_enrich_events(
     events: list[CandidateEvent],
 ) -> tuple[list[CandidateEvent], list[CandidateEvent]]:
-    """
-    应用基础质量规则，并拆分为保留/丢弃两组。
-
-    同时写入 quality_flags 与 filter_reason，便于后续人工复核。
-    """
+    """对每条事件做领域归类。topic 已包含父子主题，去重交由爬虫层。"""
     kept: list[CandidateEvent] = []
     dropped: list[CandidateEvent] = []
-    seen_event_ids: set[str] = set()
-
+    seen_summary_keys: set[str] = set()
     for event in events:
-        # 第一步：先做领域归类，并生成规则判断用文本。
         event.domain = _guess_domain(event)
-        merged_text = " ".join([event.title, event.summary]).strip()
-
-        if not event.title.strip():
-            event.filter_reason = "missing_title"
-            dropped.append(event)
-            continue
-        if event.source_url is None:
-            event.quality_flags.append("missing_source_url")
-        if _looks_non_event(merged_text):
-            event.filter_reason = "non_event_pattern"
-            dropped.append(event)
-            continue
-        if len(merged_text) < 15:
-            event.filter_reason = "too_short"
-            dropped.append(event)
-            continue
-        if not _looks_event_like(merged_text):
-            event.quality_flags.append("weak_event_signal")
-        # 去重以 event_id 为准，策略偏保守，宁可少删不误删。
-        if event.event_id in seen_event_ids:
-            event.filter_reason = "duplicate"
-            dropped.append(event)
-            continue
-
-        seen_event_ids.add(event.event_id)
+        summary_key = _summary_dedupe_key(event.summary)
+        if summary_key:
+            if summary_key in seen_summary_keys:
+                if "duplicate_summary" not in event.quality_flags:
+                    event.quality_flags.append("duplicate_summary")
+                event.filter_reason = "duplicate_summary"
+                dropped.append(event)
+                continue
+            seen_summary_keys.add(summary_key)
         kept.append(event)
-
     return kept, dropped
+
+
+def _summary_dedupe_key(summary: str) -> str:
+    """Return a stable key for duplicate non-empty event summaries."""
+    cleaned = re.sub(r"\s+", " ", summary.strip()).casefold()
+    return cleaned

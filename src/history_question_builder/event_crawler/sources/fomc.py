@@ -146,7 +146,7 @@ class FOMCCalendarCrawler(BaseSourceCrawler):
                 CandidateEvent.from_source(
                     source=self.source_name,
                     event_date=meeting_date,
-                    title=f"FOMC meeting ({month_label} {date_token_text}, {year})",
+                    topic=f"FOMC meeting ({month_label} {date_token_text}, {year})",
                     summary=(
                         "Federal Open Market Committee scheduled meeting date "
                         "from official calendar."

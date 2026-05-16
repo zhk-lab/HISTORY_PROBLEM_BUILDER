@@ -58,7 +58,7 @@ python -m pip install -e .
 ### 1. 爬取事件
 
 ```bash
-crawl-events --start-date 2026-05-01 --end-date 2026-05-10 --output-dir data/event
+crawl-events --start-date 2026-05-01 --end-date 2026-05-15 --output-dir data/event --sources wikipedia
 ```
 
 也可以使用模块方式运行：
@@ -127,3 +127,10 @@ QUESTION_AGENT_TEMPERATURE=0.2
 1. 由于维基结构清晰，字段容易获得，所以目前爬虫只局限于维基。
 2. 首先检查通过筛选后的问题生成质量如何。
 3. 调整筛选策略，AI写的一定不是特别完善。
+
+## 六、当前task
+
+1. 调用新的API，查看爬取内容和构造内容有什么问题。
+2. 已经爬取成功看看有没有重复的，筛出去的有没有成功筛出去
+3. 改代码把重复的晒出去
+

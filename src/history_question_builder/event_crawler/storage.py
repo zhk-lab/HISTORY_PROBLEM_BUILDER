@@ -31,7 +31,7 @@ def write_events_csv(path: Path, events: list[CandidateEvent]) -> None:
         "source",
         "domain",
         "event_date",
-        "title",
+        "topic",
         "summary",
         "source_url",
         "evidence_urls",
