@@ -88,7 +88,7 @@ ask-questions --input data/event/events_2026-05-01_to_2026-05-10.jsonl --output-
 调用真实大模型生成问题：
 
 ```bash
-ask-questions --input data/event/events_2026-05-01_to_2026-05-10.jsonl --output-dir data/questions --agent-provider chat_completions --model gpt-4.1-mini
+ask-questions --input data/event/events_2026-05-01_to_2026-05-15.jsonl --output-dir data/questions --agent-provider chat_completions --model gpt-4.1-mini
 ```
 
 也可以使用模块方式运行：

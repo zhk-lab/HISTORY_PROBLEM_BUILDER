@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
+from urllib.parse import urlparse
 
 import requests
 from pydantic import ValidationError
@@ -529,7 +530,16 @@ class ChatCompletionsQuestionAgent(QuestionAgent):
             timeout=self.timeout_seconds,
         )
         response.raise_for_status()
-        data = response.json()
+        try:
+            data = response.json()
+        except ValueError as exc:
+            preview = re.sub(r"\s+", " ", response.text).strip()[:300]
+            content_type = response.headers.get("content-type", "")
+            raise requests.RequestException(
+                "model endpoint returned non-JSON response: "
+                f"url={response.url}, status={response.status_code}, "
+                f"content-type={content_type!r}, body_preview={preview!r}"
+            ) from exc
         return str(data["choices"][0]["message"]["content"])
 
 
@@ -640,6 +650,9 @@ def _chat_completions_url(base_url: str) -> str:
         return cleaned
     if cleaned.endswith("/v1"):
         return f"{cleaned}/chat/completions"
+    parsed = urlparse(cleaned)
+    if parsed.scheme and parsed.netloc and parsed.path in {"", "/"}:
+        return f"{cleaned}/v1/chat/completions"
     return cleaned
 
 

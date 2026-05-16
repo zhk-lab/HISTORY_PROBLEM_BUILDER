@@ -21,6 +21,7 @@ from history_question_builder.question_asker.agent import (
     SYSTEM_PROMPT,
     build_question_agent,
     parse_agent_output,
+    _chat_completions_url,
 )
 from history_question_builder.question_asker.models import (
     CANDIDATE_FIELDNAMES,
@@ -343,6 +344,20 @@ class QuestionPipelineTests(unittest.TestCase):
                     os.environ[key] = value
 
         self.assertIsInstance(agent, ChatCompletionsQuestionAgent)
+
+    def test_chat_completions_url_accepts_root_and_v1_base_urls(self) -> None:
+        self.assertEqual(
+            _chat_completions_url("https://vendor.example"),
+            "https://vendor.example/v1/chat/completions",
+        )
+        self.assertEqual(
+            _chat_completions_url("https://vendor.example/v1"),
+            "https://vendor.example/v1/chat/completions",
+        )
+        self.assertEqual(
+            _chat_completions_url("https://vendor.example/v1/chat/completions"),
+            "https://vendor.example/v1/chat/completions",
+        )
 
     def test_validation_flags_common_risks(self) -> None:
         event = _event(
